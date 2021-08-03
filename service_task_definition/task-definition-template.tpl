@@ -1,7 +1,7 @@
 [  
  {
     "name": "fargate-app",
-    "image": "111476791942.dkr.ecr.us-east-1.amazonaws.com/kiwitcms/kiwi:latest",  
+    "image": "your-image-uri",  
     "cpu": 512,
     "portMappings": [
       {
