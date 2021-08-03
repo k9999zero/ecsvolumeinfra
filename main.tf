@@ -1,6 +1,6 @@
 provider "aws" {
-  access_key = "YourID"
-  secret_key = "YourSecret"
+  access_key = "AKIART5EI3KDGIQADL7U"
+  secret_key = "aYZBwU3Ok9UQw+/urhH4bLTJis4xApN8mW4N0HSi"
   region     = "us-east-1"
 }
 
@@ -35,6 +35,15 @@ resource "aws_security_group_rule" "container_ingress" {
   type              = "ingress"
   from_port         = 80
   to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.my_ecs_security_group.id
+}
+
+resource "aws_security_group_rule" "container_ingress_eighty_eighty" {
+  type              = "ingress"
+  from_port         = 8080
+  to_port           = 8080
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.my_ecs_security_group.id

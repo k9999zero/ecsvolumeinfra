@@ -1,13 +1,13 @@
 [  
  {
     "name": "fargate-app",
-    "image": "nginx",  
+    "image": "111476791942.dkr.ecr.us-east-1.amazonaws.com/kiwitcms/kiwi:latest",  
     "cpu": 512,
     "portMappings": [
       {
         "protocol": "tcp",
-        "containerPort": 80,
-        "hostPort": 80
+        "containerPort": 8080,
+        "hostPort": 8080
       }
     ],
     "memory": 1000,

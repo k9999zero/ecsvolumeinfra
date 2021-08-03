@@ -21,9 +21,10 @@ resource "aws_lb_target_group" "target-group-one" {
     timeout             = "3"
     path                = "/"
     unhealthy_threshold = "2"
+    matcher = "302"
   }
   target_type = "ip"
-  port     = "80"
+  port     = "8080"
   protocol = "HTTP"
   vpc_id   = var.vpc_id    
 }
@@ -38,9 +39,10 @@ resource "aws_lb_target_group" "target-group-two" {
     timeout             = "3"
     path                = "/"
     unhealthy_threshold = "2"
+    matcher = "302"
   }
   target_type = "ip"
-  port     = "80"
+  port     = "8080"
   protocol = "HTTP"
   vpc_id   = var.vpc_id    
 }
@@ -56,11 +58,53 @@ type = "forward"
 }
 }
 
+resource "aws_iam_role_policy" "ecs-execute-task-policy" {
+  name = "ecs_execution_policy"
+  role = aws_iam_role.role.id  
+  policy = jsonencode(
+  {
+    Version = "2012-10-17",
+    Statement = [
+        {
+            Effect = "Allow",
+            Action = [
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            Resource = "*"
+        }
+    ]
+  }
+  )
+}
+
+resource "aws_iam_role" "role" {
+  name = "ecs-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Sid    = ""
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
 resource "aws_ecs_task_definition" "hello_world" {
   family = "hello_world"
   network_mode = "awsvpc"
   requires_compatibilities = ["FARGATE"]  
-  execution_role_arn = "arn:aws:iam::111476791942:role/ecsTaskExecutionRole"
+  execution_role_arn = aws_iam_role.role.arn
   cpu = 512
   memory = 1024
   container_definitions = templatefile("${path.module}/task-definition-template.tpl", { EFSID = var.efs_id})
@@ -75,12 +119,12 @@ resource "aws_ecs_task_definition" "hello_world" {
   }
 }
 
-resource "aws_ecs_service" "one_service" {
-  name            = "one"
+resource "aws_ecs_service" "fargate_service" {
+  name            = "three"
   cluster         = var.cluster_id
   task_definition = aws_ecs_task_definition.hello_world.arn
   launch_type = "FARGATE"
-  desired_count = 1
+  desired_count = 3
 
   deployment_maximum_percent         = 100
   deployment_minimum_healthy_percent = 0
@@ -88,58 +132,99 @@ resource "aws_ecs_service" "one_service" {
   load_balancer {
     target_group_arn = aws_lb_target_group.target-group-one.arn
     container_name   = "fargate-app"
-    container_port   = 80
+    container_port   = 8080
   }    
   network_configuration{
     subnets = [var.subnets[0]]
     security_groups = var.security_group
     assign_public_ip = true
-
+  }
+  deployment_controller {
+      type = "CODE_DEPLOY"
   }
 }
 
-resource "aws_ecs_service" "two_service" {
-  name            = "two"
-  cluster         = var.cluster_id
-  task_definition = aws_ecs_task_definition.hello_world.arn
-  launch_type = "FARGATE"
-  desired_count = 1
+#######################################
+#Code deploy
+#######################################
 
-  deployment_maximum_percent         = 100
-  deployment_minimum_healthy_percent = 0
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.target-group-one.arn
-    container_name   = "fargate-app"
-    container_port   = 80
-  }    
-  network_configuration{
-    subnets = [var.subnets[1]]
-    security_groups = var.security_group
-    assign_public_ip = true
-
-  }
+resource "aws_iam_role_policy_attachment" "test-attach" {
+  role       = aws_iam_role.ecs_codedeploy_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS"
 }
 
-resource "aws_ecs_service" "three_service" {
-  name            = "three"
-  cluster         = var.cluster_id
-  task_definition = aws_ecs_task_definition.hello_world.arn
-  launch_type = "FARGATE"
-  desired_count = 1
+resource "aws_iam_role" "ecs_codedeploy_role" {
+  name = "ecs-codedeploy-role"
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "codedeploy.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
 
-  deployment_maximum_percent         = 100
-  deployment_minimum_healthy_percent = 0
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.target-group-one.arn
-    container_name   = "fargate-app"
-    container_port   = 80
-  }    
-  network_configuration{
-    subnets = [var.subnets[2]]
-    security_groups = var.security_group
-    assign_public_ip = true
+resource "aws_codedeploy_app" "example" {
+  compute_platform = "ECS"
+  name             = "comple-ecs-codedeploy"
+}
 
+resource "aws_codedeploy_deployment_group" "example" {
+  app_name               = aws_codedeploy_app.example.name
+  deployment_config_name = "CodeDeployDefault.ECSAllAtOnce"
+  deployment_group_name  = "comple-ecs-codedeploy-group"
+  service_role_arn       = aws_iam_role.ecs_codedeploy_role.arn
+  #service_role_arn       = "arn:aws:iam::694139255278:role/ecsCodeDeployRole"
+  #service_role_arn       = module.code_deploy_profile.code_deploy_role_name
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+
+  blue_green_deployment_config {
+    deployment_ready_option {
+      action_on_timeout = "CONTINUE_DEPLOYMENT"
+    }
+
+    terminate_blue_instances_on_deployment_success {
+      action                           = "TERMINATE"
+      termination_wait_time_in_minutes = 5
+    }
+  }
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+
+  ecs_service {
+    cluster_name = "white-hart"
+    service_name = "three"
+  }
+
+  load_balancer_info {
+    target_group_pair_info {
+      prod_traffic_route {
+        listener_arns = [aws_alb_listener.alb_listener.arn]
+      }
+
+      target_group {
+        name = aws_lb_target_group.target-group-one.name
+      }
+
+      target_group {
+        name = aws_lb_target_group.target-group-two.name
+      }
+    }
   }
 }
