@@ -34,3 +34,13 @@ variable "efs_id" {
   description = "Efs id"
   type = string
 }
+
+variable "cluster_name" {
+  description = "Cluster name"
+  type = string
+}
+
+variable "service_name" {
+  description = "Service name"
+  type = string  
+}

@@ -1,6 +1,6 @@
 provider "aws" {
-  access_key = "your_ID"
-  secret_key = "your_SECRET"
+  access_key = "your_id"
+  secret_key = "your_secret"
   region     = "us-east-1"
 }
 
@@ -68,7 +68,7 @@ resource "aws_security_group_rule" "egress_rule" {
 }
 
 resource "aws_ecs_cluster" "foo" {
-  name = "white-hart"
+  name = var.cluster_name
 
   setting {
     name  = "containerInsights"
@@ -82,31 +82,11 @@ resource "aws_ecs_cluster" "foo" {
 #######################################################################
 #RDS
 #######################################################################
-resource "aws_db_subnet_group" "rds_subnet_group" {
-  name       = "subnet_group"
-  subnet_ids = module.vpc.public_subnets
 
-  tags = {
-    Name = "Rds-subnet"
-  }
-}
-
-resource "aws_db_instance" "terraform_mysql" {
-  allocated_storage    = 10
-  engine               = "mysql"
-  engine_version       = "5.7"
-  instance_class       = "db.t2.micro"
-  name                 = "kiwidb"
-  username             = "admin"
-  password             = "Admin.123"
-  parameter_group_name = "default.mysql5.7"
-  skip_final_snapshot  = true
-  publicly_accessible    = true
-  db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
-  vpc_security_group_ids = [aws_security_group.my_ecs_security_group.id]
-  provisioner "local-exec" {
-  command = "mysql --host=${self.address} --port=${self.port} --user=${self.username} --password=${self.password} < ./schema.sql"
-  }
+module "ecs_rds" {
+  source = "./ecs_rds"
+  subnets = module.vpc.public_subnets
+  security_group = [aws_security_group.my_ecs_security_group.id]  
 }
 
 ########################################################################
@@ -159,8 +139,8 @@ resource "aws_efs_mount_target" "zone-three" {
   security_groups = [aws_security_group.my_ecs_security_group.id] 
 }
 
-module "hello_world" {
-  source = "./service_task_definition"
+module "ecs_cluster_task_definition" {
+  source = "./ecs_service_task_definition"
 
   cluster_id = aws_ecs_cluster.foo.id
   vpc_id = module.vpc.vpc_id
@@ -169,5 +149,8 @@ module "hello_world" {
   name = local.name
   environment = local.environment
   efs_id = aws_efs_file_system.foo.id
-  db_endpoint = aws_db_instance.terraform_mysql.address
+  #db_endpoint = aws_db_instance.terraform_mysql.address
+  db_endpoint = module.ecs_rds.endpoint
+  cluster_name = var.cluster_name
+  service_name = var.service_name
 }
