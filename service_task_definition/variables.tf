@@ -25,6 +25,11 @@ variable "environment" {
   type        = string
 }
 
+variable "db_endpoint"{
+  description = "rds url"
+  type = string
+}
+
 variable "efs_id" {
   description = "Efs id"
   type = string

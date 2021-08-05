@@ -107,7 +107,7 @@ resource "aws_ecs_task_definition" "hello_world" {
   execution_role_arn = aws_iam_role.role.arn
   cpu = 512
   memory = 1024
-  container_definitions = templatefile("${path.module}/task-definition-template.tpl", { EFSID = var.efs_id})
+  container_definitions = templatefile("${path.module}/task-definition-template.tpl", { ENDPOINT = var.db_endpoint})
   volume {
     name = "terraform-efs"
 
